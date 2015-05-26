@@ -58,13 +58,25 @@ void sigterm_handler(int sig)
 	exit_signaled = 1;
 }
 
-int disable_chip()
+int reboot()
 {
 #if DEBUG
-	printf("disable_chip(): Was called\n");
+	printf("reboot(): Was called\n");
 #endif
+	fprintf(stderr, "Zynq temperature over threshold. Rebooting board in 10 secs\n");
 	sync();
+	fflush(stdout);
+	fflush(stderr);
+
+	sleep(10);
+
+	system("/sbin/reboot");
+
+	return E_OK;
+
+#if 0
 	return ee_disable_system();
+#endif
 }
 
 int update_temp_sensor(struct watchdog *wd)
@@ -116,7 +128,7 @@ int update_temp_sensor(struct watchdog *wd)
 
 void print_warning(struct watchdog *wd, char *limit)
 {
-	fprintf(stderr, "Disabling Epiphany chip. Temperature [%d C] is %s"
+	fprintf(stderr, "Rebooting system. Temperature [%d C] is %s"
 			" allowed range [[%d -- %d] C].\n",
 			wd->curr_temp, limit, wd->min_temp,
 			wd->max_temp);
@@ -154,7 +166,7 @@ int mainloop(struct watchdog *wd)
 			} else {
 				last_warning += MAINLOOP_ITERATION_INTERVAL;
 			}
-			disable_chip();
+			reboot();
 		} else if (wd->curr_temp > wd->max_temp) {
 			if (should_warn) {
 				print_warning(wd, "above");
@@ -162,7 +174,7 @@ int mainloop(struct watchdog *wd)
 			} else {
 				last_warning += MAINLOOP_ITERATION_INTERVAL;
 			}
-			disable_chip();
+			reboot();
 		} else {
 			last_warning = -1;
 		}
@@ -281,12 +293,14 @@ int main()
 	e_set_host_verbosity(H_D1);
 #endif
 
+#if 0
 	/* Make sure we can successfully disable the chip */
 	rc = disable_chip();
 	if (rc != E_OK) {
 		fprintf(stderr, "ERROR: Disabling Epiphany chip failed.\n");
 		goto exit_e_finalize;
 	}
+#endif
 
 	/* Ensure we can access the XADC temperature sensor */
 	rc = update_temp_sensor(&wd);
@@ -295,7 +309,7 @@ int main()
 		fprintf(stderr, "Make sure to compile your kernel with"
 			" \"CONFIG_IIO=y\" and \"CONFIG_XILINX_XADC=y\".\n");
 
-		goto exit_disable_chip;
+		goto exit_e_finalize;
 	}
 
 	/* Set up SIGTERM handler */
@@ -310,8 +324,10 @@ int main()
 		fprintf(stderr, "Exiting normally\n");
 	}
 
-exit_disable_chip:
-	disable_chip();
+#if 0
+exit_reboot:
+	reboot();
+#endif
 exit_e_finalize:
 	e_finalize();
 
